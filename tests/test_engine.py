@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 from repurposer import RepurposerError, compile_document
@@ -252,6 +254,100 @@ class CompilerTests(unittest.TestCase):
                         compile_document(source_path, CONFIG, root / f"out-{index}")
                     self.assertEqual(caught.exception.code, "INVALID_SOURCE")
                     self.assertIn(expected_codepoint, str(caught.exception))
+
+    def test_destination_collision_leaves_prior_snapshot_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output_dir = root / "out"
+            compile_document(SOURCE, CONFIG, output_dir)
+            feed = output_dir / "feed.xml"
+            feed.unlink()
+            feed.mkdir()
+            before = {
+                path.name: path.read_bytes()
+                for path in output_dir.iterdir()
+                if path.is_file()
+            }
+
+            changed_source = json.loads(SOURCE.read_text())
+            changed_source["document"]["title"] = "Changed title"
+            changed_source_path = root / "changed.json"
+            changed_source_path.write_text(json.dumps(changed_source))
+            with self.assertRaises(RepurposerError) as caught:
+                compile_document(changed_source_path, CONFIG, output_dir)
+            self.assertEqual(caught.exception.code, "OUTPUT_CONFLICT")
+
+            after = {
+                path.name: path.read_bytes()
+                for path in output_dir.iterdir()
+                if path.is_file()
+            }
+            self.assertEqual(before, after)
+            self.assertTrue(feed.is_dir())
+
+    def test_unexpected_install_failure_rolls_back_every_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output_dir = root / "out"
+            compile_document(SOURCE, CONFIG, output_dir)
+            before = {
+                path.name: path.read_bytes()
+                for path in output_dir.iterdir()
+                if path.is_file()
+            }
+
+            changed_source = json.loads(SOURCE.read_text())
+            changed_source["document"]["title"] = "Changed title"
+            changed_source_path = root / "changed.json"
+            changed_source_path.write_text(json.dumps(changed_source))
+
+            real_replace = os.replace
+            call_count = 0
+
+            def fail_during_install(source: object, destination: object) -> None:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 9:
+                    raise OSError("injected install failure")
+                real_replace(source, destination)
+
+            with patch(
+                "repurposer.engine.os.replace",
+                side_effect=fail_during_install,
+            ):
+                with self.assertRaises(OSError):
+                    compile_document(changed_source_path, CONFIG, output_dir)
+
+            after = {
+                path.name: path.read_bytes()
+                for path in output_dir.iterdir()
+                if path.is_file()
+            }
+            self.assertEqual(before, after)
+            self.assertFalse(
+                any(path.suffix in {".tmp", ".backup"} for path in output_dir.iterdir())
+            )
+
+    def test_malformed_prior_manifest_returns_controlled_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index, invalid_outputs in enumerate((None, 42)):
+                with self.subTest(outputs=invalid_outputs):
+                    output_dir = root / f"out-{index}"
+                    compile_document(SOURCE, CONFIG, output_dir)
+                    manifest = output_dir / "manifest.json"
+                    manifest.write_text(
+                        json.dumps(
+                            {
+                                "schema_version": 1,
+                                "outputs": invalid_outputs,
+                            }
+                        )
+                    )
+                    with self.assertRaises(RepurposerError) as caught:
+                        compile_document(SOURCE, CONFIG, output_dir)
+                    self.assertEqual(caught.exception.code, "OUTPUT_CONFLICT")
+                    self.assertIn("must be an array", str(caught.exception))
 
 
 if __name__ == "__main__":

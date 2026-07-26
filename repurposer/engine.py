@@ -838,6 +838,11 @@ def _read_previous_manifest(output_dir: Path) -> dict[str, str]:
     manifest_path = output_dir / "manifest.json"
     if not manifest_path.exists():
         return {}
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise RepurposerError(
+            "existing manifest must be a regular file",
+            code="OUTPUT_CONFLICT",
+        )
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -850,20 +855,60 @@ def _read_previous_manifest(output_dir: Path) -> dict[str, str]:
             "existing manifest is not owned by this compiler version",
             code="OUTPUT_CONFLICT",
         )
+    raw_outputs = manifest.get("outputs")
+    if not isinstance(raw_outputs, list):
+        raise RepurposerError(
+            "existing manifest outputs must be an array",
+            code="OUTPUT_CONFLICT",
+        )
     previous: dict[str, str] = {}
-    for entry in manifest.get("outputs", []):
+    for entry in raw_outputs:
         if (
             not isinstance(entry, dict)
             or not isinstance(entry.get("filename"), str)
             or not OUTPUT_RE.fullmatch(entry["filename"])
             or not isinstance(entry.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
         ):
             raise RepurposerError(
                 "existing manifest has an invalid output entry",
                 code="OUTPUT_CONFLICT",
             )
+        if entry["filename"] in previous:
+            raise RepurposerError(
+                "existing manifest repeats an output filename",
+                code="OUTPUT_CONFLICT",
+            )
         previous[entry["filename"]] = entry["sha256"]
     return previous
+
+
+def _existing_regular_file(path: Path, label: str) -> bool:
+    if path.is_symlink():
+        raise RepurposerError(
+            f'{label} "{path.name}" cannot be a symbolic link',
+            code="OUTPUT_CONFLICT",
+        )
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise RepurposerError(
+            f'{label} "{path.name}" must be a regular file',
+            code="OUTPUT_CONFLICT",
+        )
+    return True
+
+
+def _make_backup_path(output_dir: Path, filename: str) -> Path:
+    handle, backup_name = tempfile.mkstemp(
+        prefix=f".{filename}.",
+        suffix=".backup",
+        dir=output_dir,
+    )
+    os.close(handle)
+    backup = Path(backup_name)
+    backup.unlink()
+    return backup
 
 
 def _write_outputs(
@@ -874,9 +919,25 @@ def _write_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
     previous = _read_previous_manifest(output_dir)
     stale = set(previous) - set(rendered)
+
+    for filename in rendered:
+        destination = output_dir / filename
+        if _existing_regular_file(destination, "output"):
+            if filename not in previous:
+                raise RepurposerError(
+                    f'refusing to overwrite unowned output "{filename}"',
+                    code="OUTPUT_CONFLICT",
+                )
+            actual_hash = hashlib.sha256(destination.read_bytes()).hexdigest()
+            if actual_hash != previous[filename]:
+                raise RepurposerError(
+                    f'refusing to overwrite modified output "{filename}"',
+                    code="OUTPUT_CONFLICT",
+                )
+
     for filename in stale:
         stale_path = output_dir / filename
-        if stale_path.exists():
+        if _existing_regular_file(stale_path, "stale output"):
             actual_hash = hashlib.sha256(stale_path.read_bytes()).hexdigest()
             if actual_hash != previous[filename]:
                 raise RepurposerError(
@@ -885,6 +946,9 @@ def _write_outputs(
                 )
 
     staged: list[tuple[Path, Path]] = []
+    backups: list[tuple[Path, Path]] = []
+    installed: list[Path] = []
+    committed = False
     try:
         for filename, content in {**rendered, "manifest.json": manifest_bytes}.items():
             handle, temporary_name = tempfile.mkstemp(
@@ -897,18 +961,50 @@ def _write_outputs(
                 with os.fdopen(handle, "wb") as stream:
                     stream.write(content)
                     stream.flush()
+                    os.fchmod(stream.fileno(), 0o644)
                     os.fsync(stream.fileno())
             except BaseException:
                 temporary.unlink(missing_ok=True)
                 raise
             staged.append((temporary, output_dir / filename))
+
+        destinations = [destination for _, destination in staged]
+        destinations.extend(output_dir / filename for filename in sorted(stale))
+        for destination in destinations:
+            if destination.exists():
+                backup = _make_backup_path(output_dir, destination.name)
+                os.replace(destination, backup)
+                backups.append((backup, destination))
+
         for temporary, destination in staged:
             os.replace(temporary, destination)
-        for filename in stale:
-            (output_dir / filename).unlink(missing_ok=True)
+            installed.append(destination)
+        committed = True
+    except BaseException as exc:
+        rollback_errors: list[str] = []
+        for destination in reversed(installed):
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError as rollback_exc:
+                rollback_errors.append(str(rollback_exc))
+        for backup, destination in reversed(backups):
+            try:
+                os.replace(backup, destination)
+            except OSError as rollback_exc:
+                rollback_errors.append(str(rollback_exc))
+        if rollback_errors:
+            raise RepurposerError(
+                "output transaction failed and rollback was incomplete: "
+                + "; ".join(rollback_errors),
+                code="OUTPUT_ROLLBACK_FAILED",
+            ) from exc
+        raise
     finally:
         for temporary, _ in staged:
             temporary.unlink(missing_ok=True)
+        if committed:
+            for backup, _ in backups:
+                backup.unlink(missing_ok=True)
 
 
 def compile_document(

@@ -63,7 +63,8 @@ Free-form configuration strings cannot enter generated copy.
 The output manifest records the source and configuration hashes, each generated file hash, the
 source paths consumed by each format, and its transforms. Repeated runs are byte-for-byte
 deterministic. When an output filename changes, cleanup removes the old file only when its hash
-still matches the prior manifest. Unrelated files remain in place.
+still matches the prior manifest. Unrelated files remain in place. Output installation uses a
+rollback transaction, so a destination collision or write failure cannot leave mixed generations.
 
 ## Verification
 
@@ -87,18 +88,21 @@ Observed output:
 ```text
 test_cli_compiles_all_formats_and_hashes_match (test_engine.CompilerTests.test_cli_compiles_all_formats_and_hashes_match) ... ok
 test_config_cannot_inject_free_form_output_copy (test_engine.CompilerTests.test_config_cannot_inject_free_form_output_copy) ... ok
+test_destination_collision_leaves_prior_snapshot_unchanged (test_engine.CompilerTests.test_destination_collision_leaves_prior_snapshot_unchanged) ... ok
 test_each_format_applies_its_declared_transforms (test_engine.CompilerTests.test_each_format_applies_its_declared_transforms) ... ok
 test_html_escapes_source_content (test_engine.CompilerTests.test_html_escapes_source_content) ... ok
+test_malformed_prior_manifest_returns_controlled_error (test_engine.CompilerTests.test_malformed_prior_manifest_returns_controlled_error) ... ok
 test_malformed_url_is_rejected (test_engine.CompilerTests.test_malformed_url_is_rejected) ... ok
 test_missing_source_fails_before_touching_existing_outputs (test_engine.CompilerTests.test_missing_source_fails_before_touching_existing_outputs) ... ok
 test_modified_stale_output_is_preserved_and_reported (test_engine.CompilerTests.test_modified_stale_output_is_preserved_and_reported) ... ok
 test_newsletter_language_must_come_from_source (test_engine.CompilerTests.test_newsletter_language_must_come_from_source) ... ok
 test_renamed_output_removes_only_manifest_owned_stale_file (test_engine.CompilerTests.test_renamed_output_removes_only_manifest_owned_stale_file) ... ok
 test_transform_cannot_leave_an_empty_section (test_engine.CompilerTests.test_transform_cannot_leave_an_empty_section) ... ok
+test_unexpected_install_failure_rolls_back_every_output (test_engine.CompilerTests.test_unexpected_install_failure_rolls_back_every_output) ... ok
 test_xml_invalid_characters_are_rejected_at_every_nesting_level (test_engine.CompilerTests.test_xml_invalid_characters_are_rejected_at_every_nesting_level) ... ok
 
 ----------------------------------------------------------------------
-Ran 11 tests in 0.113s
+Ran 14 tests in 0.142s
 
 OK
 PASS: CLI generated six structurally valid, source-grounded formats
@@ -106,6 +110,7 @@ PASS: repeated compilation was byte-for-byte deterministic
 PASS: safe stale-output cleanup followed the manifest
 PASS: absent source facts failed loudly before output changes
 PASS: adversarial config, URLs, nested text, metadata, and transforms were rejected
+PASS: output collisions and malformed manifests failed without partial writes
 VERIFY PASS: all required behaviors observed
 ```
 

@@ -488,6 +488,82 @@ def main() -> int:
             "were rejected"
         )
 
+        collision_output = root / "collision-output"
+        collision_baseline = run_compile(
+            SOURCE_PATH,
+            CONFIG_PATH,
+            collision_output,
+        )
+        require(collision_baseline.returncode == 0, collision_baseline.stderr)
+        collision_feed = collision_output / "feed.xml"
+        collision_feed.unlink()
+        collision_feed.mkdir()
+        before_collision = {
+            path.name: path.read_bytes()
+            for path in collision_output.iterdir()
+            if path.is_file()
+        }
+        changed_source = json.loads(SOURCE_PATH.read_text())
+        changed_source["document"]["title"] = "A changed source title"
+        changed_source_path = root / "changed-source.json"
+        changed_source_path.write_text(json.dumps(changed_source))
+        collision = run_compile(
+            changed_source_path,
+            CONFIG_PATH,
+            collision_output,
+        )
+        require(collision.returncode == 2, "destination directory collision succeeded")
+        require(
+            "OUTPUT_CONFLICT" in collision.stderr,
+            "destination collision returned the wrong error",
+        )
+        require("Traceback" not in collision.stderr, "destination collision crashed")
+        after_collision = {
+            path.name: path.read_bytes()
+            for path in collision_output.iterdir()
+            if path.is_file()
+        }
+        require(
+            before_collision == after_collision,
+            "destination collision partially replaced the prior snapshot",
+        )
+        require(collision_feed.is_dir(), "destination collision changed the directory")
+
+        for index, invalid_outputs in enumerate((None, 42)):
+            manifest_output = root / f"manifest-output-{index}"
+            manifest_baseline = run_compile(
+                SOURCE_PATH,
+                CONFIG_PATH,
+                manifest_output,
+            )
+            require(manifest_baseline.returncode == 0, manifest_baseline.stderr)
+            (manifest_output / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "outputs": invalid_outputs,
+                    }
+                )
+            )
+            malformed_manifest = run_compile(
+                SOURCE_PATH,
+                CONFIG_PATH,
+                manifest_output,
+            )
+            require(
+                malformed_manifest.returncode == 2,
+                "malformed prior manifest did not return exit code 2",
+            )
+            require(
+                "OUTPUT_CONFLICT" in malformed_manifest.stderr,
+                "malformed prior manifest returned the wrong error",
+            )
+            require(
+                "Traceback" not in malformed_manifest.stderr,
+                "malformed prior manifest produced a traceback",
+            )
+        print("PASS: output collisions and malformed manifests failed without partial writes")
+
     print("VERIFY PASS: all required behaviors observed")
     return 0
 
