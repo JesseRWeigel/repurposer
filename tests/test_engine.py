@@ -208,7 +208,7 @@ class CompilerTests(unittest.TestCase):
                     "https://example.com／not-valid",
                     *(
                         f"https://example.com/path{character}segment"
-                        for character in '<>"{}|^`'
+                        for character in '<>"{}|^`[]'
                     ),
                     "https://example.com/path\u007fsegment",
                 )
@@ -233,6 +233,29 @@ class CompilerTests(unittest.TestCase):
                 compile_document(SOURCE, config_path, root / "out")
             self.assertEqual(caught.exception.code, "INVALID_CONFIG")
             self.assertIn("version must be 1", str(caught.exception))
+
+    def test_valid_rfc_urls_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            valid_urls = (
+                "https://example.com/a;b/c:d@e?x=1&y=two/three?ok#frag/part?x",
+                "https://[2001:db8::1]:8443/path",
+                "https://xn--bcher-kva.example/%E2%9C%93",
+                "http://localhost:8080/",
+            )
+            for index, valid_url in enumerate(valid_urls):
+                with self.subTest(url=valid_url):
+                    source = json.loads(SOURCE.read_text())
+                    source["document"]["canonical_url"] = valid_url
+                    source_path = root / f"valid-source-{index}.json"
+                    source_path.write_text(json.dumps(source))
+                    output_dir = root / f"valid-output-{index}"
+                    compile_document(source_path, CONFIG, output_dir)
+                    feed = ET.parse(output_dir / "feed.xml")
+                    self.assertEqual(
+                        feed.findtext("./channel/link"),
+                        valid_url,
+                    )
 
     def test_newsletter_language_must_come_from_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

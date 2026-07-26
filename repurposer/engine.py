@@ -73,6 +73,9 @@ PATH_PART_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 HOST_LABEL_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 BAD_PERCENT_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 UNSAFE_URL_CHARACTERS = frozenset('<>"{}|^`')
+PATH_COMPONENT_RE = re.compile(r"[A-Za-z0-9._~!$&'()*+,;=:@/%-]*")
+PARAM_COMPONENT_RE = re.compile(r"[A-Za-z0-9._~!$&'()*+,;=:@%-]*")
+QUERY_COMPONENT_RE = re.compile(r"[A-Za-z0-9._~!$&'()*+,;=:@/?%-]*")
 DC_NAMESPACE = "http://purl.org/dc/elements/1.1/"
 
 
@@ -203,6 +206,7 @@ def _validate_url(value: str, context: str) -> None:
             character.isspace()
             or ord(character) < 0x20
             or ord(character) == 0x7F
+            or ord(character) > 0x7E
             or character in UNSAFE_URL_CHARACTERS
             for character in value
         )
@@ -231,6 +235,16 @@ def _validate_url(value: str, context: str) -> None:
     ):
         raise RepurposerError(
             f"{context} must be an absolute HTTP or HTTPS URL",
+            code="INVALID_SOURCE",
+        )
+    if (
+        not PATH_COMPONENT_RE.fullmatch(parsed.path)
+        or not PARAM_COMPONENT_RE.fullmatch(parsed.params)
+        or not QUERY_COMPONENT_RE.fullmatch(parsed.query)
+        or not QUERY_COMPONENT_RE.fullmatch(parsed.fragment)
+    ):
+        raise RepurposerError(
+            f"{context} contains characters not allowed by RFC 3986",
             code="INVALID_SOURCE",
         )
     try:

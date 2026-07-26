@@ -60,6 +60,9 @@ operations, duplicate output names, unsafe filenames, and invalid URLs also stop
 before output files are written. Renderer options are limited to safe presentation controls.
 Free-form configuration strings cannot enter generated copy.
 
+HTTP and HTTPS URLs follow RFC 3986 component rules. Internationalized hostnames and non-ASCII
+paths must use punycode and percent encoding.
+
 The output manifest records the source and configuration hashes, each generated file hash, the
 source paths consumed by each format, and its transforms. Repeated runs are byte-for-byte
 deterministic. When an output filename changes, cleanup removes the old file only when its hash
@@ -105,10 +108,11 @@ test_prior_manifest_rejects_duplicate_keys_and_boolean_version (test_engine.Comp
 test_renamed_output_removes_only_manifest_owned_stale_file (test_engine.CompilerTests.test_renamed_output_removes_only_manifest_owned_stale_file) ... ok
 test_transform_cannot_leave_an_empty_section (test_engine.CompilerTests.test_transform_cannot_leave_an_empty_section) ... ok
 test_unexpected_install_failure_rolls_back_every_output (test_engine.CompilerTests.test_unexpected_install_failure_rolls_back_every_output) ... ok
+test_valid_rfc_urls_are_accepted (test_engine.CompilerTests.test_valid_rfc_urls_are_accepted) ... ok
 test_xml_invalid_characters_are_rejected_at_every_nesting_level (test_engine.CompilerTests.test_xml_invalid_characters_are_rejected_at_every_nesting_level) ... ok
 
 ----------------------------------------------------------------------
-Ran 18 tests in 0.205s
+Ran 19 tests in 0.193s
 
 OK
 PASS: CLI generated six structurally valid, source-grounded formats

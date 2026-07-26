@@ -451,7 +451,7 @@ def main() -> int:
             ("parser-exception-url", parser_exception_url, "INVALID_SOURCE")
         )
 
-        for index, unsafe_character in enumerate('<>"{}|^`\u007f'):
+        for index, unsafe_character in enumerate('<>"{}|^`[]\u007f'):
             unsafe_url = json.loads(SOURCE_PATH.read_text())
             unsafe_url["document"]["canonical_url"] = (
                 f"https://example.com/path{unsafe_character}segment"
@@ -511,6 +511,29 @@ def main() -> int:
             require(
                 not adversarial_output.exists(),
                 f"{name} failure wrote output files",
+            )
+        valid_urls = (
+            "https://example.com/a;b/c:d@e?x=1&y=two/three?ok#frag/part?x",
+            "https://[2001:db8::1]:8443/path",
+            "https://xn--bcher-kva.example/%E2%9C%93",
+            "http://localhost:8080/",
+        )
+        for index, valid_url in enumerate(valid_urls):
+            valid_source = json.loads(SOURCE_PATH.read_text())
+            valid_source["document"]["canonical_url"] = valid_url
+            valid_source_path = root / f"valid-url-{index}.json"
+            valid_source_path.write_text(json.dumps(valid_source))
+            valid_output = root / f"valid-url-output-{index}"
+            valid_result = run_compile(
+                valid_source_path,
+                CONFIG_PATH,
+                valid_output,
+            )
+            require(valid_result.returncode == 0, valid_result.stderr)
+            valid_feed = ET.parse(valid_output / "feed.xml")
+            require(
+                valid_feed.findtext("./channel/link") == valid_url,
+                f"valid URL {index} changed in RSS",
             )
         print(
             "PASS: adversarial config, URLs, nested text, metadata, and transforms "
