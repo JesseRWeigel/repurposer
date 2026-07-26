@@ -72,6 +72,7 @@ HEX_COLOR_RE = re.compile(r"#[0-9A-Fa-f]{6}")
 PATH_PART_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 HOST_LABEL_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 BAD_PERCENT_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+UNSAFE_URL_CHARACTERS = frozenset('<>"{}|^`')
 DC_NAMESPACE = "http://purl.org/dc/elements/1.1/"
 
 
@@ -198,7 +199,13 @@ def _resolve_path(source: dict[str, Any], source_path: str, format_name: str) ->
 
 def _validate_url(value: str, context: str) -> None:
     if (
-        any(character.isspace() or ord(character) < 0x20 for character in value)
+        any(
+            character.isspace()
+            or ord(character) < 0x20
+            or ord(character) == 0x7F
+            or character in UNSAFE_URL_CHARACTERS
+            for character in value
+        )
         or "\\" in value
         or BAD_PERCENT_RE.search(value)
     ):
@@ -807,7 +814,7 @@ def _validate_config_root(config: dict[str, Any]) -> dict[str, Any]:
             f"configuration has unsupported keys: {', '.join(sorted(unknown))}",
             code="INVALID_CONFIG",
         )
-    if config.get("version") != 1:
+    if type(config.get("version")) is not int or config["version"] != 1:
         raise RepurposerError(
             "configuration version must be 1",
             code="INVALID_CONFIG",

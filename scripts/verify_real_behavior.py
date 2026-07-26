@@ -413,6 +413,26 @@ def main() -> int:
             "rejected free-form config wrote output files",
         )
 
+        boolean_config = json.loads(CONFIG_PATH.read_text())
+        boolean_config["version"] = True
+        boolean_config_path = root / "boolean-config-version.json"
+        boolean_config_path.write_text(json.dumps(boolean_config))
+        boolean_config_output = root / "boolean-config-output"
+        boolean_version = run_compile(
+            SOURCE_PATH,
+            boolean_config_path,
+            boolean_config_output,
+        )
+        require(
+            boolean_version.returncode == 2
+            and "INVALID_CONFIG" in boolean_version.stderr,
+            "Boolean configuration version was accepted",
+        )
+        require(
+            not boolean_config_output.exists(),
+            "Boolean configuration version wrote output files",
+        )
+
         adversarial_sources: list[tuple[str, dict[str, object], str]] = []
 
         malformed_url = json.loads(SOURCE_PATH.read_text())
@@ -430,6 +450,15 @@ def main() -> int:
         adversarial_sources.append(
             ("parser-exception-url", parser_exception_url, "INVALID_SOURCE")
         )
+
+        for index, unsafe_character in enumerate('<>"{}|^`\u007f'):
+            unsafe_url = json.loads(SOURCE_PATH.read_text())
+            unsafe_url["document"]["canonical_url"] = (
+                f"https://example.com/path{unsafe_character}segment"
+            )
+            adversarial_sources.append(
+                (f"unsafe-url-{index}", unsafe_url, "INVALID_SOURCE")
+            )
 
         invalid_xml = json.loads(SOURCE_PATH.read_text())
         invalid_xml["document"]["summary"] += "\u0001"

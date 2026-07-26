@@ -206,6 +206,11 @@ class CompilerTests(unittest.TestCase):
                 (
                     "https://exa mple.com/not-valid",
                     "https://example.com／not-valid",
+                    *(
+                        f"https://example.com/path{character}segment"
+                        for character in '<>"{}|^`'
+                    ),
+                    "https://example.com/path\u007fsegment",
                 )
             ):
                 with self.subTest(url=malformed):
@@ -216,6 +221,18 @@ class CompilerTests(unittest.TestCase):
                     with self.assertRaises(RepurposerError) as caught:
                         compile_document(source_path, CONFIG, root / f"out-{index}")
                     self.assertEqual(caught.exception.code, "INVALID_SOURCE")
+
+    def test_config_version_must_be_integer_one(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = json.loads(CONFIG.read_text())
+            config["version"] = True
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config))
+            with self.assertRaises(RepurposerError) as caught:
+                compile_document(SOURCE, config_path, root / "out")
+            self.assertEqual(caught.exception.code, "INVALID_CONFIG")
+            self.assertIn("version must be 1", str(caught.exception))
 
     def test_newsletter_language_must_come_from_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

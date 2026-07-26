@@ -91,6 +91,7 @@ Observed output:
 test_backup_cleanup_retries_after_a_transient_failure (test_engine.CompilerTests.test_backup_cleanup_retries_after_a_transient_failure) ... ok
 test_cli_compiles_all_formats_and_hashes_match (test_engine.CompilerTests.test_cli_compiles_all_formats_and_hashes_match) ... ok
 test_config_cannot_inject_free_form_output_copy (test_engine.CompilerTests.test_config_cannot_inject_free_form_output_copy) ... ok
+test_config_version_must_be_integer_one (test_engine.CompilerTests.test_config_version_must_be_integer_one) ... ok
 test_dangling_manifest_symlink_is_a_collision (test_engine.CompilerTests.test_dangling_manifest_symlink_is_a_collision) ... ok
 test_destination_collision_leaves_prior_snapshot_unchanged (test_engine.CompilerTests.test_destination_collision_leaves_prior_snapshot_unchanged) ... ok
 test_each_format_applies_its_declared_transforms (test_engine.CompilerTests.test_each_format_applies_its_declared_transforms) ... ok
@@ -107,7 +108,7 @@ test_unexpected_install_failure_rolls_back_every_output (test_engine.CompilerTes
 test_xml_invalid_characters_are_rejected_at_every_nesting_level (test_engine.CompilerTests.test_xml_invalid_characters_are_rejected_at_every_nesting_level) ... ok
 
 ----------------------------------------------------------------------
-Ran 17 tests in 0.193s
+Ran 18 tests in 0.205s
 
 OK
 PASS: CLI generated six structurally valid, source-grounded formats
