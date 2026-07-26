@@ -14,7 +14,12 @@ in configuration.
 Assumption: "canonical document" means structured source content with explicit metadata,
 sections, and optional facts. JSON keeps the format inspectable and avoids a runtime dependency.
 
-## Running it
+## Requirements
+
+- Python 3.10 or newer
+- No third-party packages
+
+## Quick start
 
 ```bash
 python3 -m repurposer compile examples/source.json \
@@ -22,8 +27,46 @@ python3 -m repurposer compile examples/source.json \
   --output-dir build
 ```
 
-The verification command is defined before implementation and exercises the real CLI, all six
-renderers, output validation, stale-output cleanup, and failure on a requested missing fact:
+Successful compilation writes these seven files:
+
+| Format | Example output |
+| --- | --- |
+| Newsletter HTML | `newsletter.html` |
+| RSS 2.0 feed | `feed.xml` |
+| Podcast script | `podcast-script.txt` |
+| Vertical video storyboard | `vertical-storyboard.json` |
+| Carousel plan | `carousel.json` |
+| Plain text | `plain.txt` |
+| Provenance and hashes | `manifest.json` |
+
+## Source and configuration
+
+The source can use any object layout. Each format maps fixed renderer roles such as `title`,
+`summary`, and `sections` to dotted paths in that object. See
+[`examples/source.json`](examples/source.json) and
+[`examples/transforms.json`](examples/transforms.json) for a complete pair.
+
+Every format has its own `transforms` array. Supported operations are:
+
+- `take_sections`
+- `take_paragraphs_per_section`
+- `take_bullets_per_section`
+- `drop_bullets`
+
+Transforms select or omit source content. They never generate replacement copy. A format stops
+with a `SOURCE_GAP` error when a mapped path is absent or null. Schema errors, unsupported
+operations, duplicate output names, unsafe filenames, and invalid URLs also stop compilation
+before output files are written.
+
+The output manifest records the source and configuration hashes, each generated file hash, the
+source paths consumed by each format, and its transforms. Repeated runs are byte-for-byte
+deterministic. When an output filename changes, cleanup removes the old file only when its hash
+still matches the prior manifest. Unrelated files remain in place.
+
+## Verification
+
+This command exercises the real CLI, all six renderers, independent structure and grounding
+checks, deterministic output, safe stale-output cleanup, and failure on a requested missing fact:
 
 ```bash
 python3 -m unittest discover -s tests -v && python3 scripts/verify_real_behavior.py
@@ -31,12 +74,36 @@ python3 -m unittest discover -s tests -v && python3 scripts/verify_real_behavior
 
 ## Status
 
-**NOT YET VERIFIED.** No verify command has been run against this project.
+Verified with Python 3.12.3. Command:
 
-A maintainer or agent must replace this section with the pasted output of the verify
-command. Per `AGENTS.md`, a project is not done until that output appears here and
-`tools/logrun.py` has recorded exit code 0.
+```bash
+python3 -m unittest discover -s tests -v && python3 scripts/verify_real_behavior.py
+```
+
+Observed output:
+
+```text
+test_cli_compiles_all_formats_and_hashes_match (test_engine.CompilerTests.test_cli_compiles_all_formats_and_hashes_match) ... ok
+test_each_format_applies_its_declared_transforms (test_engine.CompilerTests.test_each_format_applies_its_declared_transforms) ... ok
+test_html_escapes_source_content (test_engine.CompilerTests.test_html_escapes_source_content) ... ok
+test_missing_source_fails_before_touching_existing_outputs (test_engine.CompilerTests.test_missing_source_fails_before_touching_existing_outputs) ... ok
+test_modified_stale_output_is_preserved_and_reported (test_engine.CompilerTests.test_modified_stale_output_is_preserved_and_reported) ... ok
+test_renamed_output_removes_only_manifest_owned_stale_file (test_engine.CompilerTests.test_renamed_output_removes_only_manifest_owned_stale_file) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.105s
+
+OK
+PASS: CLI generated six structurally valid, source-grounded formats
+PASS: repeated compilation was byte-for-byte deterministic
+PASS: safe stale-output cleanup followed the manifest
+PASS: absent source facts failed loudly before output changes
+VERIFY PASS: all required behaviors observed
+```
 
 ## Unfinished
 
-- Implementation has not started.
+- No incomplete items are known within the `MEDIA-046` task scope.
+- Audio and encoded video rendering are outside this compiler. It produces the requested podcast
+  script and vertical video storyboard.
+- Source documents and transform configuration currently use JSON only.

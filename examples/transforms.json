@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "formats": {
+    "newsletter_html": {
+      "output": "newsletter.html",
+      "source": {
+        "title": "document.title",
+        "summary": "document.summary",
+        "author": "document.author",
+        "language": "document.language",
+        "sections": "document.sections",
+        "call_to_action": "document.call_to_action"
+      },
+      "transforms": [
+        {
+          "op": "take_paragraphs_per_section",
+          "count": 2
+        }
+      ],
+      "options": {
+        "accent_color": "#275DAD"
+      }
+    },
+    "rss": {
+      "output": "feed.xml",
+      "source": {
+        "title": "document.title",
+        "summary": "document.summary",
+        "author": "document.author",
+        "published": "document.published",
+        "canonical_url": "document.canonical_url",
+        "language": "document.language",
+        "sections": "document.sections",
+        "call_to_action": "document.call_to_action"
+      },
+      "transforms": [
+        {
+          "op": "take_sections",
+          "count": 3
+        }
+      ],
+      "options": {}
+    },
+    "podcast_script": {
+      "output": "podcast-script.txt",
+      "source": {
+        "title": "document.title",
+        "summary": "document.summary",
+        "sections": "document.sections",
+        "call_to_action": "document.call_to_action"
+      },
+      "transforms": [
+        {
+          "op": "drop_bullets"
+        }
+      ],
+      "options": {
+        "speaker": "HOST"
+      }
+    },
+    "vertical_video_storyboard": {
+      "output": "vertical-storyboard.json",
+      "source": {
+        "title": "document.title",
+        "summary": "document.summary",
+        "sections": "document.sections",
+        "call_to_action": "document.call_to_action"
+      },
+      "transforms": [
+        {
+          "op": "take_sections",
+          "count": 2
+        },
+        {
+          "op": "take_paragraphs_per_section",
+          "count": 1
+        },
+        {
+          "op": "take_bullets_per_section",
+          "count": 1
+        }
+      ],
+      "options": {
+        "seconds_per_scene": 6,
+        "visual_direction": "Use source-matched footage with readable captions."
+      }
+    },
+    "carousel": {
+      "output": "carousel.json",
+      "source": {
+        "title": "document.title",
+        "summary": "document.summary",
+        "sections": "document.sections",
+        "call_to_action": "document.call_to_action"
+      },
+      "transforms": [
+        {
+          "op": "take_sections",
+          "count": 3
+        },
+        {
+          "op": "take_paragraphs_per_section",
+          "count": 1
+        },
+        {
+          "op": "take_bullets_per_section",
+          "count": 2
+        }
+      ],
+      "options": {
+        "cover_label": "Field note"
+      }
+    },
+    "plain_text": {
+      "output": "plain.txt",
+      "source": {
+        "title": "document.title",
+        "summary": "document.summary",
+        "author": "document.author",
+        "sections": "document.sections",
+        "call_to_action": "document.call_to_action"
+      },
+      "transforms": [],
+      "options": {
+        "include_urls": true
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "document": {
+    "title": "A practical loop for small experiments",
+    "summary": "Small experiments become useful when each one starts with a clear question and ends with recorded evidence.",
+    "author": "Repurposer Example Team",
+    "published": "2026-07-26T14:00:00-04:00",
+    "canonical_url": "https://example.com/small-experiments",
+    "language": "en",
+    "sections": [
+      {
+        "heading": "Choose one question",
+        "paragraphs": [
+          "Write down the single uncertainty that matters most to the next decision.",
+          "A narrow question makes the result easier to interpret and share."
+        ],
+        "bullets": [
+          "Name the decision owner.",
+          "Set a review date before work begins."
+        ]
+      },
+      {
+        "heading": "Collect visible evidence",
+        "paragraphs": [
+          "Save the observed result beside the question so another person can inspect it.",
+          "Record failed attempts because they narrow the available choices."
+        ],
+        "bullets": [
+          "Keep raw measurements.",
+          "Link each conclusion to an observation."
+        ]
+      },
+      {
+        "heading": "Decide the next move",
+        "paragraphs": [
+          "Compare the evidence with the original question and choose a concrete follow-up.",
+          "Close the experiment when the decision has enough support."
+        ],
+        "bullets": [
+          "Continue when uncertainty remains useful.",
+          "Stop when the evidence answers the question."
+        ]
+      }
+    ],
+    "call_to_action": {
+      "label": "Use the experiment worksheet",
+      "url": "https://example.com/small-experiments/worksheet"
+    }
+  }
+}
