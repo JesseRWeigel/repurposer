@@ -423,10 +423,36 @@ def main() -> int:
             ("malformed-url", malformed_url, "INVALID_SOURCE")
         )
 
+        parser_exception_url = json.loads(SOURCE_PATH.read_text())
+        parser_exception_url["document"]["canonical_url"] = (
+            "https://example.com／not-valid"
+        )
+        adversarial_sources.append(
+            ("parser-exception-url", parser_exception_url, "INVALID_SOURCE")
+        )
+
         invalid_xml = json.loads(SOURCE_PATH.read_text())
         invalid_xml["document"]["summary"] += "\u0001"
         adversarial_sources.append(
             ("invalid-xml", invalid_xml, "INVALID_SOURCE")
+        )
+
+        nested_invalid_xml = json.loads(SOURCE_PATH.read_text())
+        nested_invalid_xml["document"]["sections"][0]["paragraphs"][0] += "\u0001"
+        adversarial_sources.append(
+            ("nested-invalid-xml", nested_invalid_xml, "INVALID_SOURCE")
+        )
+
+        invalid_surrogate = json.loads(SOURCE_PATH.read_text())
+        invalid_surrogate["document"]["sections"][0]["bullets"][0] += "\ud800"
+        adversarial_sources.append(
+            ("invalid-surrogate", invalid_surrogate, "INVALID_SOURCE")
+        )
+
+        missing_language = json.loads(SOURCE_PATH.read_text())
+        del missing_language["document"]["language"]
+        adversarial_sources.append(
+            ("missing-language", missing_language, "SOURCE_GAP")
         )
 
         emptied_section = json.loads(SOURCE_PATH.read_text())
@@ -457,7 +483,10 @@ def main() -> int:
                 not adversarial_output.exists(),
                 f"{name} failure wrote output files",
             )
-        print("PASS: adversarial config, URLs, XML text, and transforms were rejected")
+        print(
+            "PASS: adversarial config, URLs, nested text, metadata, and transforms "
+            "were rejected"
+        )
 
     print("VERIFY PASS: all required behaviors observed")
     return 0

@@ -200,28 +200,58 @@ class CompilerTests(unittest.TestCase):
     def test_malformed_url_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source = json.loads(SOURCE.read_text())
-            source["document"]["canonical_url"] = (
-                "https://exa mple.com/not-valid"
-            )
-            source_path = root / "source.json"
-            source_path.write_text(json.dumps(source))
-            with self.assertRaises(RepurposerError) as caught:
-                compile_document(source_path, CONFIG, root / "out")
-            self.assertEqual(caught.exception.code, "INVALID_SOURCE")
-            self.assertIn("invalid URL characters", str(caught.exception))
+            for index, malformed in enumerate(
+                (
+                    "https://exa mple.com/not-valid",
+                    "https://example.com／not-valid",
+                )
+            ):
+                with self.subTest(url=malformed):
+                    source = json.loads(SOURCE.read_text())
+                    source["document"]["canonical_url"] = malformed
+                    source_path = root / f"source-{index}.json"
+                    source_path.write_text(json.dumps(source))
+                    with self.assertRaises(RepurposerError) as caught:
+                        compile_document(source_path, CONFIG, root / f"out-{index}")
+                    self.assertEqual(caught.exception.code, "INVALID_SOURCE")
 
-    def test_xml_invalid_control_character_is_rejected(self) -> None:
+    def test_newsletter_language_must_come_from_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = json.loads(SOURCE.read_text())
-            source["document"]["summary"] += "\u0001"
+            del source["document"]["language"]
             source_path = root / "source.json"
             source_path.write_text(json.dumps(source))
             with self.assertRaises(RepurposerError) as caught:
                 compile_document(source_path, CONFIG, root / "out")
-            self.assertEqual(caught.exception.code, "INVALID_SOURCE")
-            self.assertIn("U+0001", str(caught.exception))
+            self.assertEqual(caught.exception.code, "SOURCE_GAP")
+            self.assertIn("document.language", str(caught.exception))
+
+    def test_xml_invalid_characters_are_rejected_at_every_nesting_level(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cases = (
+                ("summary", "\u0001", "U+0001"),
+                ("paragraph", "\u0001", "U+0001"),
+                ("bullet", "\ud800", "U+D800"),
+            )
+            for index, (location, character, expected_codepoint) in enumerate(cases):
+                with self.subTest(location=location):
+                    source = json.loads(SOURCE.read_text())
+                    if location == "summary":
+                        source["document"]["summary"] += character
+                    elif location == "paragraph":
+                        source["document"]["sections"][0]["paragraphs"][0] += (
+                            character
+                        )
+                    else:
+                        source["document"]["sections"][0]["bullets"][0] += character
+                    source_path = root / f"source-{index}.json"
+                    source_path.write_text(json.dumps(source))
+                    with self.assertRaises(RepurposerError) as caught:
+                        compile_document(source_path, CONFIG, root / f"out-{index}")
+                    self.assertEqual(caught.exception.code, "INVALID_SOURCE")
+                    self.assertIn(expected_codepoint, str(caught.exception))
 
 
 if __name__ == "__main__":

@@ -39,7 +39,9 @@ ROLE_TYPES: dict[str, type] = {
 }
 
 REQUIRED_ROLES: dict[str, frozenset[str]] = {
-    "newsletter_html": frozenset({"title", "summary", "author", "sections"}),
+    "newsletter_html": frozenset(
+        {"title", "summary", "author", "language", "sections"}
+    ),
     "rss": frozenset(
         {
             "title",
@@ -203,11 +205,19 @@ def _validate_url(value: str, context: str) -> None:
             f"{context} contains invalid URL characters",
             code="INVALID_SOURCE",
         )
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise RepurposerError(
+            f"{context} is not a valid URL",
+            code="INVALID_SOURCE",
+        ) from exc
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.netloc
-        or not parsed.hostname
+        or not hostname
         or parsed.username is not None
         or parsed.password is not None
     ):
@@ -215,14 +225,6 @@ def _validate_url(value: str, context: str) -> None:
             f"{context} must be an absolute HTTP or HTTPS URL",
             code="INVALID_SOURCE",
         )
-    try:
-        parsed.port
-    except ValueError as exc:
-        raise RepurposerError(
-            f"{context} has an invalid port",
-            code="INVALID_SOURCE",
-        ) from exc
-    hostname = parsed.hostname
     try:
         ipaddress.ip_address(hostname)
     except ValueError:
@@ -266,20 +268,24 @@ def _validate_sections(value: Any, context: str) -> list[dict[str, Any]]:
         heading = _nonempty_string(raw_section.get("heading"), f"{prefix}.heading")
         paragraphs = raw_section.get("paragraphs", [])
         bullets = raw_section.get("bullets", [])
-        if not isinstance(paragraphs, list) or any(
-            not isinstance(item, str) or not item.strip() for item in paragraphs
-        ):
+        if not isinstance(paragraphs, list):
             raise RepurposerError(
                 f"{prefix}.paragraphs must be an array of non-empty strings",
                 code="INVALID_SOURCE",
             )
-        if not isinstance(bullets, list) or any(
-            not isinstance(item, str) or not item.strip() for item in bullets
-        ):
+        if not isinstance(bullets, list):
             raise RepurposerError(
                 f"{prefix}.bullets must be an array of non-empty strings",
                 code="INVALID_SOURCE",
             )
+        validated_paragraphs = [
+            _nonempty_string(item, f"{prefix}.paragraphs[{item_index}]")
+            for item_index, item in enumerate(paragraphs)
+        ]
+        validated_bullets = [
+            _nonempty_string(item, f"{prefix}.bullets[{item_index}]")
+            for item_index, item in enumerate(bullets)
+        ]
         if not paragraphs and not bullets:
             raise RepurposerError(
                 f"{prefix} needs at least one paragraph or bullet",
@@ -288,8 +294,8 @@ def _validate_sections(value: Any, context: str) -> list[dict[str, Any]]:
         validated.append(
             {
                 "heading": heading,
-                "paragraphs": list(paragraphs),
-                "bullets": list(bullets),
+                "paragraphs": validated_paragraphs,
+                "bullets": validated_bullets,
             }
         )
     return validated
@@ -558,7 +564,7 @@ def _section_html(sections: list[dict[str, Any]]) -> str:
 def _render_newsletter(view: FormatView, options: dict[str, Any]) -> str:
     roles = view.roles
     accent = options.get("accent_color", "#335CFF")
-    language = html.escape(roles.get("language", "en"), quote=True)
+    language = html.escape(roles["language"], quote=True)
     cta = ""
     if "call_to_action" in roles:
         action = roles["call_to_action"]

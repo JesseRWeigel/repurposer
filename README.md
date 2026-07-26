@@ -92,19 +92,20 @@ test_html_escapes_source_content (test_engine.CompilerTests.test_html_escapes_so
 test_malformed_url_is_rejected (test_engine.CompilerTests.test_malformed_url_is_rejected) ... ok
 test_missing_source_fails_before_touching_existing_outputs (test_engine.CompilerTests.test_missing_source_fails_before_touching_existing_outputs) ... ok
 test_modified_stale_output_is_preserved_and_reported (test_engine.CompilerTests.test_modified_stale_output_is_preserved_and_reported) ... ok
+test_newsletter_language_must_come_from_source (test_engine.CompilerTests.test_newsletter_language_must_come_from_source) ... ok
 test_renamed_output_removes_only_manifest_owned_stale_file (test_engine.CompilerTests.test_renamed_output_removes_only_manifest_owned_stale_file) ... ok
 test_transform_cannot_leave_an_empty_section (test_engine.CompilerTests.test_transform_cannot_leave_an_empty_section) ... ok
-test_xml_invalid_control_character_is_rejected (test_engine.CompilerTests.test_xml_invalid_control_character_is_rejected) ... ok
+test_xml_invalid_characters_are_rejected_at_every_nesting_level (test_engine.CompilerTests.test_xml_invalid_characters_are_rejected_at_every_nesting_level) ... ok
 
 ----------------------------------------------------------------------
-Ran 10 tests in 0.108s
+Ran 11 tests in 0.113s
 
 OK
 PASS: CLI generated six structurally valid, source-grounded formats
 PASS: repeated compilation was byte-for-byte deterministic
 PASS: safe stale-output cleanup followed the manifest
 PASS: absent source facts failed loudly before output changes
-PASS: adversarial config, URLs, XML text, and transforms were rejected
+PASS: adversarial config, URLs, nested text, metadata, and transforms were rejected
 VERIFY PASS: all required behaviors observed
 ```
 
