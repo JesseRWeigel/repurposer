@@ -349,6 +349,82 @@ class CompilerTests(unittest.TestCase):
                     self.assertEqual(caught.exception.code, "OUTPUT_CONFLICT")
                     self.assertIn("must be an array", str(caught.exception))
 
+    def test_prior_manifest_rejects_duplicate_keys_and_boolean_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index, case in enumerate(("duplicate", "boolean")):
+                with self.subTest(case=case):
+                    output_dir = root / f"out-{index}"
+                    compile_document(SOURCE, CONFIG, output_dir)
+                    manifest_path = output_dir / "manifest.json"
+                    if case == "duplicate":
+                        invalid_manifest = manifest_path.read_text().replace(
+                            '"schema_version": 1,',
+                            '"schema_version": 1,\\n  "schema_version": 1,',
+                            1,
+                        )
+                    else:
+                        manifest = json.loads(manifest_path.read_text())
+                        manifest["schema_version"] = True
+                        invalid_manifest = json.dumps(manifest)
+                    manifest_path.write_text(invalid_manifest)
+
+                    with self.assertRaises(RepurposerError) as caught:
+                        compile_document(SOURCE, CONFIG, output_dir)
+                    self.assertEqual(caught.exception.code, "OUTPUT_CONFLICT")
+                    self.assertEqual(manifest_path.read_text(), invalid_manifest)
+
+    def test_dangling_manifest_symlink_is_a_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output_dir = Path(temporary) / "out"
+            output_dir.mkdir()
+            manifest_path = output_dir / "manifest.json"
+            manifest_path.symlink_to("missing-manifest-target.json")
+
+            with self.assertRaises(RepurposerError) as caught:
+                compile_document(SOURCE, CONFIG, output_dir)
+            self.assertEqual(caught.exception.code, "OUTPUT_CONFLICT")
+            self.assertTrue(manifest_path.is_symlink())
+            self.assertEqual(
+                manifest_path.readlink(),
+                Path("missing-manifest-target.json"),
+            )
+            self.assertEqual(list(output_dir.iterdir()), [manifest_path])
+
+    def test_backup_cleanup_retries_after_a_transient_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output_dir = root / "out"
+            compile_document(SOURCE, CONFIG, output_dir)
+            changed_source = json.loads(SOURCE.read_text())
+            changed_source["document"]["title"] = "Changed title"
+            changed_source_path = root / "changed.json"
+            changed_source_path.write_text(json.dumps(changed_source))
+
+            real_unlink = Path.unlink
+            backup_unlink_count = 0
+
+            def fail_first_cleanup(path: Path, *args: object, **kwargs: object) -> None:
+                nonlocal backup_unlink_count
+                if path.suffix == ".backup":
+                    backup_unlink_count += 1
+                    if backup_unlink_count == 8:
+                        raise OSError("injected backup cleanup failure")
+                real_unlink(path, *args, **kwargs)
+
+            with patch.object(Path, "unlink", new=fail_first_cleanup):
+                result = compile_document(changed_source_path, CONFIG, output_dir)
+
+            self.assertEqual(result.warnings, ())
+            self.assertGreaterEqual(backup_unlink_count, 15)
+            self.assertFalse(
+                any(path.suffix == ".backup" for path in output_dir.iterdir())
+            )
+            self.assertIn(
+                "Changed title",
+                (output_dir / "newsletter.html").read_text(),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

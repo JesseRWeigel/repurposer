@@ -50,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     for format_name, filename in result.outputs:
         print(f"{format_name}: {filename}")
     print("manifest: manifest.json")
+    for warning in result.warnings:
+        print(f"repurposer: WARNING: {warning}", file=sys.stderr)
     return 0
 
 

@@ -89,6 +89,7 @@ class CompileResult:
 
     output_dir: Path
     outputs: tuple[tuple[str, str], ...]
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass
@@ -836,21 +837,38 @@ def _validate_config_root(config: dict[str, Any]) -> dict[str, Any]:
 
 def _read_previous_manifest(output_dir: Path) -> dict[str, str]:
     manifest_path = output_dir / "manifest.json"
+    if manifest_path.is_symlink():
+        raise RepurposerError(
+            "existing manifest cannot be a symbolic link",
+            code="OUTPUT_CONFLICT",
+        )
     if not manifest_path.exists():
         return {}
-    if manifest_path.is_symlink() or not manifest_path.is_file():
+    if not manifest_path.is_file():
         raise RepurposerError(
             "existing manifest must be a regular file",
             code="OUTPUT_CONFLICT",
         )
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(
+            manifest_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+        )
+    except RepurposerError as exc:
+        raise RepurposerError(
+            f"existing manifest is invalid: {exc}",
+            code="OUTPUT_CONFLICT",
+        ) from exc
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RepurposerError(
             f"existing manifest is unreadable: {exc}",
             code="OUTPUT_CONFLICT",
         ) from exc
-    if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
+    if (
+        not isinstance(manifest, dict)
+        or type(manifest.get("schema_version")) is not int
+        or manifest["schema_version"] != 1
+    ):
         raise RepurposerError(
             "existing manifest is not owned by this compiler version",
             code="OUTPUT_CONFLICT",
@@ -915,7 +933,7 @@ def _write_outputs(
     output_dir: Path,
     rendered: dict[str, bytes],
     manifest_bytes: bytes,
-) -> None:
+) -> tuple[str, ...]:
     output_dir.mkdir(parents=True, exist_ok=True)
     previous = _read_previous_manifest(output_dir)
     stale = set(previous) - set(rendered)
@@ -949,6 +967,7 @@ def _write_outputs(
     backups: list[tuple[Path, Path]] = []
     installed: list[Path] = []
     committed = False
+    warnings: list[str] = []
     try:
         for filename, content in {**rendered, "manifest.json": manifest_bytes}.items():
             handle, temporary_name = tempfile.mkstemp(
@@ -1004,7 +1023,20 @@ def _write_outputs(
             temporary.unlink(missing_ok=True)
         if committed:
             for backup, _ in backups:
-                backup.unlink(missing_ok=True)
+                last_error: OSError | None = None
+                for _ in range(3):
+                    try:
+                        backup.unlink(missing_ok=True)
+                        last_error = None
+                        break
+                    except OSError as cleanup_error:
+                        last_error = cleanup_error
+                if last_error is not None:
+                    warnings.append(
+                        f'committed output, but could not remove backup '
+                        f'"{backup.name}": {last_error}'
+                    )
+    return tuple(warnings)
 
 
 def compile_document(
@@ -1060,5 +1092,9 @@ def compile_document(
     manifest_bytes = (
         json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
     )
-    _write_outputs(output_dir, rendered, manifest_bytes)
-    return CompileResult(output_dir=output_dir, outputs=tuple(result_outputs))
+    warnings = _write_outputs(output_dir, rendered, manifest_bytes)
+    return CompileResult(
+        output_dir=output_dir,
+        outputs=tuple(result_outputs),
+        warnings=warnings,
+    )

@@ -562,7 +562,68 @@ def main() -> int:
                 "Traceback" not in malformed_manifest.stderr,
                 "malformed prior manifest produced a traceback",
             )
-        print("PASS: output collisions and malformed manifests failed without partial writes")
+
+        manifest_edge_cases: list[tuple[str, str]] = []
+        duplicate_output = root / "manifest-duplicate"
+        duplicate_baseline = run_compile(
+            SOURCE_PATH,
+            CONFIG_PATH,
+            duplicate_output,
+        )
+        require(duplicate_baseline.returncode == 0, duplicate_baseline.stderr)
+        duplicate_manifest = duplicate_output / "manifest.json"
+        duplicate_text = duplicate_manifest.read_text().replace(
+            '"schema_version": 1,',
+            '"schema_version": 1,\\n  "schema_version": 1,',
+            1,
+        )
+        duplicate_manifest.write_text(duplicate_text)
+        manifest_edge_cases.append(("duplicate", duplicate_text))
+
+        boolean_output = root / "manifest-boolean"
+        boolean_baseline = run_compile(
+            SOURCE_PATH,
+            CONFIG_PATH,
+            boolean_output,
+        )
+        require(boolean_baseline.returncode == 0, boolean_baseline.stderr)
+        boolean_manifest = boolean_output / "manifest.json"
+        boolean_payload = json.loads(boolean_manifest.read_text())
+        boolean_payload["schema_version"] = True
+        boolean_text = json.dumps(boolean_payload)
+        boolean_manifest.write_text(boolean_text)
+        manifest_edge_cases.append(("boolean", boolean_text))
+
+        for case, original_text in manifest_edge_cases:
+            case_output = root / f"manifest-{case}"
+            result = run_compile(SOURCE_PATH, CONFIG_PATH, case_output)
+            require(
+                result.returncode == 2 and "OUTPUT_CONFLICT" in result.stderr,
+                f"{case} manifest key case was accepted",
+            )
+            require(
+                (case_output / "manifest.json").read_text() == original_text,
+                f"{case} manifest was silently rewritten",
+            )
+
+        dangling_output = root / "dangling-manifest"
+        dangling_output.mkdir()
+        dangling_manifest = dangling_output / "manifest.json"
+        dangling_manifest.symlink_to("missing-target.json")
+        dangling = run_compile(SOURCE_PATH, CONFIG_PATH, dangling_output)
+        require(
+            dangling.returncode == 2 and "OUTPUT_CONFLICT" in dangling.stderr,
+            "dangling manifest symlink was accepted",
+        )
+        require(
+            dangling_manifest.is_symlink()
+            and dangling_manifest.readlink() == Path("missing-target.json"),
+            "dangling manifest symlink was replaced",
+        )
+        print(
+            "PASS: output collisions, malformed manifests, and symlinks failed "
+            "without partial writes"
+        )
 
     print("VERIFY PASS: all required behaviors observed")
     return 0
