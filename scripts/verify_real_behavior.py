@@ -23,20 +23,27 @@ class TextCollector(HTMLParser):
         super().__init__()
         self.text: list[str] = []
         self.links: list[str] = []
+        self.ignored_depth = 0
 
     def handle_starttag(
         self,
         tag: str,
         attrs: list[tuple[str, str | None]],
     ) -> None:
+        if tag in {"script", "style"}:
+            self.ignored_depth += 1
         if tag == "a":
             attributes = dict(attrs)
             if attributes.get("href"):
                 self.links.append(attributes["href"] or "")
 
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"} and self.ignored_depth:
+            self.ignored_depth -= 1
+
     def handle_data(self, data: str) -> None:
         stripped = data.strip()
-        if stripped:
+        if stripped and not self.ignored_depth:
             self.text.append(stripped)
 
 
@@ -73,19 +80,26 @@ def assert_source_text_in_collector(
     collector: TextCollector,
     source: dict[str, object],
 ) -> None:
-    text = collector.text
-    require(source["title"] in text, "newsletter title was changed or omitted")
-    require(source["summary"] in text, "newsletter summary was changed or omitted")
-    require(source["author"] in text, "newsletter author was changed or omitted")
+    expected_text = [
+        source["title"],
+        source["title"],
+        source["author"],
+        source["summary"],
+    ]
     for section in source["sections"]:
-        require(section["heading"] in text, "newsletter heading was changed or omitted")
-        for paragraph in section["paragraphs"]:
-            require(paragraph in text, "newsletter paragraph was changed or omitted")
-        for bullet in section["bullets"]:
-            require(bullet in text, "newsletter bullet was changed or omitted")
+        expected_text.append(section["heading"])
+        expected_text.extend(section["paragraphs"])
+        expected_text.extend(section["bullets"])
     action = source["call_to_action"]
-    require(action["label"] in text, "newsletter action label was changed or omitted")
-    require(action["url"] in collector.links, "newsletter action URL is absent")
+    expected_text.append(action["label"])
+    require(
+        collector.text == expected_text,
+        "newsletter visible copy differs from exact transformed source copy",
+    )
+    require(
+        collector.links == [action["url"]],
+        "newsletter links differ from exact source URLs",
+    )
 
 
 def verify_valid_outputs(output_dir: Path, source: dict[str, object]) -> None:
@@ -132,77 +146,155 @@ def verify_valid_outputs(output_dir: Path, source: dict[str, object]) -> None:
     rss_description = item.findtext("description") or ""
     rss_parser = TextCollector()
     rss_parser.feed(rss_description)
-    require(source["summary"] in rss_parser.text, "RSS item summary is absent")
+    expected_rss_text = [source["summary"]]
     for section in source["sections"]:
-        require(section["heading"] in rss_parser.text, "RSS section is absent")
+        expected_rss_text.append(section["heading"])
+        expected_rss_text.extend(section["paragraphs"])
+        expected_rss_text.extend(section["bullets"])
+    expected_rss_text.append(source["call_to_action"]["label"])
     require(
-        source["call_to_action"]["url"] in rss_parser.links,
-        "RSS action URL is absent",
+        rss_parser.text == expected_rss_text,
+        "RSS item copy differs from exact transformed source copy",
+    )
+    require(
+        rss_parser.links == [source["call_to_action"]["url"]],
+        "RSS item links differ from exact source URLs",
     )
 
     podcast = (output_dir / "podcast-script.txt").read_text()
-    require(source["title"] in podcast, "podcast title is absent")
-    require(source["summary"] in podcast, "podcast summary is absent")
+    podcast_lines = [
+        f"# {source['title']}",
+        "",
+        "[HOST]",
+        source["summary"],
+    ]
     for section in source["sections"]:
-        require(section["heading"] in podcast, "podcast heading is absent")
+        podcast_lines.extend(["", f"## {section['heading']}"])
         for paragraph in section["paragraphs"]:
-            require(paragraph in podcast, "podcast paragraph is absent")
-        for bullet in section["bullets"]:
-            require(bullet not in podcast, "podcast drop_bullets transform failed")
+            podcast_lines.extend(["", "[HOST]", paragraph])
+    action = source["call_to_action"]
+    podcast_lines.extend(
+        [
+            "",
+            "[CALL TO ACTION]",
+            "[HOST]",
+            f"{action['label']}: {action['url']}",
+        ]
+    )
+    require(
+        podcast == "\n".join(podcast_lines) + "\n",
+        "podcast copy differs from exact transformed source copy",
+    )
 
     storyboard = json.loads(
         (output_dir / "vertical-storyboard.json").read_text()
     )
-    require(storyboard["aspect_ratio"] == "9:16", "storyboard aspect ratio changed")
-    require(storyboard["total_duration_seconds"] == 24, "storyboard duration is wrong")
-    require(len(storyboard["scenes"]) == 4, "storyboard scene count is wrong")
-    require(
-        storyboard["scenes"][0]["voiceover"] == source["summary"],
-        "storyboard cover copy was synthesized",
+    direction = "Use typography and visuals supported by the source."
+    expected_scenes = [
+        {
+            "scene": 1,
+            "duration_seconds": 6,
+            "on_screen_text": source["title"],
+            "voiceover": source["summary"],
+            "visual_direction": direction,
+            "source_roles": ["title", "summary"],
+        }
+    ]
+    for section in source["sections"][:2]:
+        expected_scenes.append(
+            {
+                "scene": len(expected_scenes) + 1,
+                "duration_seconds": 6,
+                "on_screen_text": section["heading"],
+                "voiceover": (
+                    section["paragraphs"][0] + "\n" + section["bullets"][0]
+                ),
+                "visual_direction": direction,
+                "source_roles": ["sections"],
+            }
+        )
+    expected_scenes.append(
+        {
+            "scene": 4,
+            "duration_seconds": 6,
+            "on_screen_text": action["label"],
+            "voiceover": action["url"],
+            "visual_direction": direction,
+            "source_roles": ["call_to_action"],
+        }
     )
-    for index, section in enumerate(source["sections"][:2], start=1):
-        expected_voiceover = (
-            section["paragraphs"][0] + "\n" + section["bullets"][0]
-        )
-        scene = storyboard["scenes"][index]
-        require(
-            scene["on_screen_text"] == section["heading"],
-            "storyboard heading was synthesized",
-        )
-        require(
-            scene["voiceover"] == expected_voiceover,
-            "storyboard transform did not select exact source copy",
-        )
+    expected_storyboard = {
+        "format": "vertical_video_storyboard",
+        "aspect_ratio": "9:16",
+        "title": source["title"],
+        "total_duration_seconds": 24,
+        "scenes": expected_scenes,
+    }
     require(
-        source["sections"][2]["heading"]
-        not in json.dumps(storyboard, ensure_ascii=False),
-        "storyboard take_sections transform failed",
+        storyboard == expected_storyboard,
+        "storyboard differs from the exact expected grounded payload",
     )
 
     carousel = json.loads((output_dir / "carousel.json").read_text())
-    require(len(carousel["slides"]) == 5, "carousel slide count is wrong")
-    require(
-        carousel["slides"][0]["body"] == [source["summary"]],
-        "carousel cover summary was synthesized",
-    )
-    for index, section in enumerate(source["sections"], start=1):
-        slide = carousel["slides"][index]
-        require(slide["heading"] == section["heading"], "carousel heading changed")
-        require(
-            slide["body"]
-            == [section["paragraphs"][0], *section["bullets"][:2]],
-            "carousel transform selected the wrong source copy",
+    expected_slides = [
+        {
+            "slide": 1,
+            "kind": "cover",
+            "label": "Cover",
+            "heading": source["title"],
+            "body": [source["summary"]],
+            "source_roles": ["title", "summary"],
+        }
+    ]
+    for section in source["sections"]:
+        expected_slides.append(
+            {
+                "slide": len(expected_slides) + 1,
+                "kind": "content",
+                "heading": section["heading"],
+                "body": [section["paragraphs"][0], *section["bullets"][:2]],
+                "source_roles": ["sections"],
+            }
         )
+    expected_slides.append(
+        {
+            "slide": 5,
+            "kind": "call_to_action",
+            "heading": action["label"],
+            "body": [action["url"]],
+            "source_roles": ["call_to_action"],
+        }
+    )
+    require(
+        carousel
+        == {
+            "format": "carousel",
+            "title": source["title"],
+            "slides": expected_slides,
+        },
+        "carousel differs from the exact expected grounded payload",
+    )
 
     plain = (output_dir / "plain.txt").read_text()
-    for value in (source["title"], source["summary"], source["author"]):
-        require(value in plain, "plain-text metadata is absent")
+    plain_lines = [
+        source["title"],
+        "=" * len(source["title"]),
+        f"By {source['author']}",
+        "",
+        source["summary"],
+    ]
     for section in source["sections"]:
-        require(section["heading"] in plain, "plain-text heading is absent")
-        for paragraph in section["paragraphs"]:
-            require(paragraph in plain, "plain-text paragraph is absent")
-        for bullet in section["bullets"]:
-            require(bullet in plain, "plain-text bullet is absent")
+        plain_lines.extend(
+            ["", section["heading"], "-" * len(section["heading"]), ""]
+        )
+        plain_lines.extend(section["paragraphs"])
+        plain_lines.append("")
+        plain_lines.extend(f"* {bullet}" for bullet in section["bullets"])
+    plain_lines.extend(["", f"{action['label']}: {action['url']}"])
+    require(
+        plain == "\n".join(plain_lines) + "\n",
+        "plain text differs from exact transformed source copy",
+    )
 
     manifest = json.loads((output_dir / "manifest.json").read_text())
     require(manifest["schema_version"] == 1, "manifest version is wrong")
@@ -298,6 +390,74 @@ def main() -> int:
             "failed compilation changed existing outputs",
         )
         print("PASS: absent source facts failed loudly before output changes")
+
+        injected_config = json.loads(CONFIG_PATH.read_text())
+        injected_config["formats"]["vertical_video_storyboard"]["options"][
+            "visual_direction"
+        ] = "Claim a result that the source never states."
+        injected_config["formats"]["carousel"]["options"]["cover_label"] = (
+            "Invented factual label"
+        )
+        injected_config_path = root / "injected-config.json"
+        injected_config_path.write_text(json.dumps(injected_config))
+        injection_output = root / "injection-output"
+        injection = run_compile(SOURCE_PATH, injected_config_path, injection_output)
+        require(injection.returncode == 2, "free-form config copy was accepted")
+        require(
+            "INVALID_CONFIG" in injection.stderr
+            and "unsupported options" in injection.stderr,
+            "free-form config copy returned the wrong error",
+        )
+        require(
+            not injection_output.exists(),
+            "rejected free-form config wrote output files",
+        )
+
+        adversarial_sources: list[tuple[str, dict[str, object], str]] = []
+
+        malformed_url = json.loads(SOURCE_PATH.read_text())
+        malformed_url["document"]["canonical_url"] = (
+            "https://exa mple.com/not-valid"
+        )
+        adversarial_sources.append(
+            ("malformed-url", malformed_url, "INVALID_SOURCE")
+        )
+
+        invalid_xml = json.loads(SOURCE_PATH.read_text())
+        invalid_xml["document"]["summary"] += "\u0001"
+        adversarial_sources.append(
+            ("invalid-xml", invalid_xml, "INVALID_SOURCE")
+        )
+
+        emptied_section = json.loads(SOURCE_PATH.read_text())
+        emptied_section["document"]["sections"][0] = {
+            "heading": "Bullet-only section",
+            "paragraphs": [],
+            "bullets": ["Content that drop_bullets would remove."],
+        }
+        adversarial_sources.append(
+            ("empty-transform", emptied_section, "EMPTY_FORMAT")
+        )
+
+        for name, payload, error_code in adversarial_sources:
+            adversarial_path = root / f"{name}.json"
+            adversarial_path.write_text(json.dumps(payload))
+            adversarial_output = root / f"{name}-output"
+            result = run_compile(
+                adversarial_path,
+                CONFIG_PATH,
+                adversarial_output,
+            )
+            require(result.returncode == 2, f"{name} input was accepted")
+            require(
+                error_code in result.stderr,
+                f"{name} returned the wrong error code",
+            )
+            require(
+                not adversarial_output.exists(),
+                f"{name} failure wrote output files",
+            )
+        print("PASS: adversarial config, URLs, XML text, and transforms were rejected")
 
     print("VERIFY PASS: all required behaviors observed")
     return 0

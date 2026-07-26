@@ -81,8 +81,7 @@
         }
       ],
       "options": {
-        "seconds_per_scene": 6,
-        "visual_direction": "Use source-matched footage with readable captions."
+        "seconds_per_scene": 6
       }
     },
     "carousel": {
@@ -107,9 +106,7 @@
           "count": 2
         }
       ],
-      "options": {
-        "cover_label": "Field note"
-      }
+      "options": {}
     },
     "plain_text": {
       "output": "plain.txt",

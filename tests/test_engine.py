@@ -162,6 +162,67 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(old_output.read_text(), "manual edit")
             self.assertFalse((output_dir / "newsletter-v2.html").exists())
 
+    def test_config_cannot_inject_free_form_output_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for format_name, option_name in (
+                ("vertical_video_storyboard", "visual_direction"),
+                ("carousel", "cover_label"),
+            ):
+                with self.subTest(option=option_name):
+                    config = json.loads(CONFIG.read_text())
+                    config["formats"][format_name]["options"][option_name] = (
+                        "An unsupported factual claim"
+                    )
+                    config_path = root / f"{option_name}.json"
+                    config_path.write_text(json.dumps(config))
+                    with self.assertRaises(RepurposerError) as caught:
+                        compile_document(SOURCE, config_path, root / option_name)
+                    self.assertEqual(caught.exception.code, "INVALID_CONFIG")
+                    self.assertIn("unsupported options", str(caught.exception))
+
+    def test_transform_cannot_leave_an_empty_section(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = json.loads(SOURCE.read_text())
+            source["document"]["sections"][0] = {
+                "heading": "Bullet-only section",
+                "paragraphs": [],
+                "bullets": ["This content must survive or compilation must fail."]
+            }
+            source_path = root / "source.json"
+            source_path.write_text(json.dumps(source))
+            with self.assertRaises(RepurposerError) as caught:
+                compile_document(source_path, CONFIG, root / "out")
+            self.assertEqual(caught.exception.code, "EMPTY_FORMAT")
+            self.assertIn("Bullet-only section", str(caught.exception))
+
+    def test_malformed_url_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = json.loads(SOURCE.read_text())
+            source["document"]["canonical_url"] = (
+                "https://exa mple.com/not-valid"
+            )
+            source_path = root / "source.json"
+            source_path.write_text(json.dumps(source))
+            with self.assertRaises(RepurposerError) as caught:
+                compile_document(source_path, CONFIG, root / "out")
+            self.assertEqual(caught.exception.code, "INVALID_SOURCE")
+            self.assertIn("invalid URL characters", str(caught.exception))
+
+    def test_xml_invalid_control_character_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = json.loads(SOURCE.read_text())
+            source["document"]["summary"] += "\u0001"
+            source_path = root / "source.json"
+            source_path.write_text(json.dumps(source))
+            with self.assertRaises(RepurposerError) as caught:
+                compile_document(source_path, CONFIG, root / "out")
+            self.assertEqual(caught.exception.code, "INVALID_SOURCE")
+            self.assertIn("U+0001", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@ from datetime import datetime
 from email.utils import format_datetime
 import hashlib
 import html
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -59,16 +60,16 @@ OPTION_KEYS: dict[str, frozenset[str]] = {
     "newsletter_html": frozenset({"accent_color"}),
     "rss": frozenset(),
     "podcast_script": frozenset({"speaker"}),
-    "vertical_video_storyboard": frozenset(
-        {"seconds_per_scene", "visual_direction"}
-    ),
-    "carousel": frozenset({"cover_label"}),
+    "vertical_video_storyboard": frozenset({"seconds_per_scene"}),
+    "carousel": frozenset(),
     "plain_text": frozenset({"include_urls"}),
 }
 
 OUTPUT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,126}")
 HEX_COLOR_RE = re.compile(r"#[0-9A-Fa-f]{6}")
 PATH_PART_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
+HOST_LABEL_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+BAD_PERCENT_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 DC_NAMESPACE = "http://purl.org/dc/elements/1.1/"
 
 
@@ -142,6 +143,24 @@ def _nonempty_string(value: Any, context: str) -> str:
             f"{context} must be a non-empty string",
             code="INVALID_SOURCE",
         )
+    invalid_codepoint = next(
+        (
+            ord(character)
+            for character in value
+            if not (
+                character in "\t\n\r"
+                or "\u0020" <= character <= "\ud7ff"
+                or "\ue000" <= character <= "\ufffd"
+                or "\U00010000" <= character <= "\U0010ffff"
+            )
+        ),
+        None,
+    )
+    if invalid_codepoint is not None:
+        raise RepurposerError(
+            f"{context} contains invalid Unicode code point U+{invalid_codepoint:04X}",
+            code="INVALID_SOURCE",
+        )
     return value
 
 
@@ -175,12 +194,53 @@ def _resolve_path(source: dict[str, Any], source_path: str, format_name: str) ->
 
 
 def _validate_url(value: str, context: str) -> None:
+    if (
+        any(character.isspace() or ord(character) < 0x20 for character in value)
+        or "\\" in value
+        or BAD_PERCENT_RE.search(value)
+    ):
+        raise RepurposerError(
+            f"{context} contains invalid URL characters",
+            code="INVALID_SOURCE",
+        )
     parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
         raise RepurposerError(
             f"{context} must be an absolute HTTP or HTTPS URL",
             code="INVALID_SOURCE",
         )
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise RepurposerError(
+            f"{context} has an invalid port",
+            code="INVALID_SOURCE",
+        ) from exc
+    hostname = parsed.hostname
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            ascii_hostname = hostname.encode("idna").decode("ascii")
+        except UnicodeError as exc:
+            raise RepurposerError(
+                f"{context} has an invalid hostname",
+                code="INVALID_SOURCE",
+            ) from exc
+        if len(ascii_hostname) > 253 or any(
+            not HOST_LABEL_RE.fullmatch(label)
+            for label in ascii_hostname.rstrip(".").split(".")
+        ):
+            raise RepurposerError(
+                f"{context} has an invalid hostname",
+                code="INVALID_SOURCE",
+            )
 
 
 def _validate_sections(value: Any, context: str) -> list[dict[str, Any]]:
@@ -295,11 +355,14 @@ def _validate_options(format_name: str, raw_options: Any) -> dict[str, Any]:
                 f"[{format_name}] accent_color must be a six-digit hex color",
                 code="INVALID_CONFIG",
             )
-    for key in ("speaker", "visual_direction", "cover_label"):
-        if key in options:
-            options[key] = _nonempty_string(
-                options[key],
-                f"[{format_name}] {key}",
+    if "speaker" in options:
+        if (
+            not isinstance(options["speaker"], str)
+            or options["speaker"] not in {"HOST", "NARRATOR"}
+        ):
+            raise RepurposerError(
+                f"[{format_name}] speaker must be HOST or NARRATOR",
+                code="INVALID_CONFIG",
             )
     if "seconds_per_scene" in options:
         options["seconds_per_scene"] = _positive_int(
@@ -395,11 +458,15 @@ def _apply_transforms(
             f"[{format_name}] transforms removed every section",
             code="EMPTY_FORMAT",
         )
-    if all(
-        not section["paragraphs"] and not section["bullets"] for section in sections
-    ):
+    empty_sections = [
+        section["heading"]
+        for section in sections
+        if not section["paragraphs"] and not section["bullets"]
+    ]
+    if empty_sections:
         raise RepurposerError(
-            f"[{format_name}] transforms removed all section content",
+            f'[{format_name}] transforms removed all content from section '
+            f'"{empty_sections[0]}"',
             code="EMPTY_FORMAT",
         )
     roles = dict(view.roles)
@@ -607,10 +674,7 @@ def _render_podcast(view: FormatView, options: dict[str, Any]) -> str:
 def _render_storyboard(view: FormatView, options: dict[str, Any]) -> str:
     roles = view.roles
     seconds = options.get("seconds_per_scene", 7)
-    direction = options.get(
-        "visual_direction",
-        "Use typography and visuals supported by the source.",
-    )
+    direction = "Use typography and visuals supported by the source."
     scenes = [
         {
             "scene": 1,
@@ -661,7 +725,7 @@ def _render_carousel(view: FormatView, options: dict[str, Any]) -> str:
         {
             "slide": 1,
             "kind": "cover",
-            "label": options.get("cover_label", "Cover"),
+            "label": "Cover",
             "heading": roles["title"],
             "body": [roles["summary"]],
             "source_roles": ["title", "summary"],

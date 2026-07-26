@@ -2,7 +2,8 @@
 
 A single canonical document compiles to newsletter HTML, RSS, a podcast script, a vertical video storyboard, a carousel, and a plain-text version, with per-format transforms declared in config rather than done by re-prompting. Formats that would require inventing facts not present in the source fail loudly instead of hallucinating filler.
 
-Catalog task: `MEDIA-046`. Part of [thousand](../../README.md).
+Catalog task: `MEDIA-046`. Part of [thousand](../../README.md). Repo: none. The fleet lead will
+create and push the public GitHub repository from the networked host.
 
 ## What this is
 
@@ -56,7 +57,8 @@ Every format has its own `transforms` array. Supported operations are:
 Transforms select or omit source content. They never generate replacement copy. A format stops
 with a `SOURCE_GAP` error when a mapped path is absent or null. Schema errors, unsupported
 operations, duplicate output names, unsafe filenames, and invalid URLs also stop compilation
-before output files are written.
+before output files are written. Renderer options are limited to safe presentation controls.
+Free-form configuration strings cannot enter generated copy.
 
 The output manifest records the source and configuration hashes, each generated file hash, the
 source paths consumed by each format, and its transforms. Repeated runs are byte-for-byte
@@ -84,20 +86,25 @@ Observed output:
 
 ```text
 test_cli_compiles_all_formats_and_hashes_match (test_engine.CompilerTests.test_cli_compiles_all_formats_and_hashes_match) ... ok
+test_config_cannot_inject_free_form_output_copy (test_engine.CompilerTests.test_config_cannot_inject_free_form_output_copy) ... ok
 test_each_format_applies_its_declared_transforms (test_engine.CompilerTests.test_each_format_applies_its_declared_transforms) ... ok
 test_html_escapes_source_content (test_engine.CompilerTests.test_html_escapes_source_content) ... ok
+test_malformed_url_is_rejected (test_engine.CompilerTests.test_malformed_url_is_rejected) ... ok
 test_missing_source_fails_before_touching_existing_outputs (test_engine.CompilerTests.test_missing_source_fails_before_touching_existing_outputs) ... ok
 test_modified_stale_output_is_preserved_and_reported (test_engine.CompilerTests.test_modified_stale_output_is_preserved_and_reported) ... ok
 test_renamed_output_removes_only_manifest_owned_stale_file (test_engine.CompilerTests.test_renamed_output_removes_only_manifest_owned_stale_file) ... ok
+test_transform_cannot_leave_an_empty_section (test_engine.CompilerTests.test_transform_cannot_leave_an_empty_section) ... ok
+test_xml_invalid_control_character_is_rejected (test_engine.CompilerTests.test_xml_invalid_control_character_is_rejected) ... ok
 
 ----------------------------------------------------------------------
-Ran 6 tests in 0.105s
+Ran 10 tests in 0.108s
 
 OK
 PASS: CLI generated six structurally valid, source-grounded formats
 PASS: repeated compilation was byte-for-byte deterministic
 PASS: safe stale-output cleanup followed the manifest
 PASS: absent source facts failed loudly before output changes
+PASS: adversarial config, URLs, XML text, and transforms were rejected
 VERIFY PASS: all required behaviors observed
 ```
 
