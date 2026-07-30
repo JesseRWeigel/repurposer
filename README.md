@@ -2,6 +2,8 @@
 
 A single canonical document compiles to newsletter HTML, RSS, a podcast script, a vertical video storyboard, a carousel, and a plain-text version, with per-format transforms declared in config rather than done by re-prompting. Formats that would require inventing facts not present in the source fail loudly instead of hallucinating filler.
 
+**[Read this on the web](https://jesserweigel.github.io/repurposer/)**
+
 Catalog task: `MEDIA-046`. Part of [thousand](https://github.com/JesseRWeigel/722-things-to-build). Repo: none. The fleet lead will
 create and push the public GitHub repository from the networked host.
 
