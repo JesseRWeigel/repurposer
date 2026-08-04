@@ -4,7 +4,7 @@ A single canonical document compiles to newsletter HTML, RSS, a podcast script, 
 
 **[Read this on the web](https://jesserweigel.github.io/repurposer/)**
 
-Catalog task: `MEDIA-046`. Part of [thousand](https://github.com/JesseRWeigel/722-things-to-build). Repo: none. The fleet lead will
+Catalog task: `MEDIA-046`. Part of [722 things to build](https://github.com/JesseRWeigel/722-things-to-build). Repo: none. The fleet lead will
 create and push the public GitHub repository from the networked host.
 
 ## What this is
