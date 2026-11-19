@@ -1,0 +1,34 @@
+{
+  "document": {
+    "title": "Why Minecraft bots left towers behind",
+    "summary": "An unattended Minecraft swarm left towers and unfinished bridges near its base.",
+    "author": "Metsuke",
+    "published": "2026-08-05T00:00:00Z",
+    "canonical_url": "https://jesseweigel.com/log/2026-08-05-pillars-and-bridges-to-nowhere",
+    "language": "en",
+    "sections": [
+      {
+        "heading": "Where the towers came from",
+        "paragraphs": [
+          "When a bot got stuck, some recovery routes still let the pathfinder place scaffolding."
+        ],
+        "bullets": [
+          "Regular walking had scaffolding disabled."
+        ]
+      },
+      {
+        "heading": "The debris marked trouble spots",
+        "paragraphs": [
+          "Clusters of towers showed where navigation kept failing near the stash."
+        ],
+        "bullets": [
+          "Model-directed block placement was a separate source of clutter."
+        ]
+      }
+    ],
+    "call_to_action": {
+      "label": "Read Pillars and Bridges to Nowhere",
+      "url": "https://jesseweigel.com/log/2026-08-05-pillars-and-bridges-to-nowhere"
+    }
+  }
+}

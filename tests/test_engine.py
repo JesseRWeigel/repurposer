@@ -54,6 +54,35 @@ class CompilerTests(unittest.TestCase):
             feed = ET.parse(output_dir / "feed.xml")
             self.assertEqual(feed.getroot().tag, "rss")
 
+    def test_minecraft_example_compiles_and_keeps_both_causes_distinct(self) -> None:
+        example = PROJECT_ROOT / "examples" / "minecraft-pillars.json"
+        canonical_url = (
+            "https://jesseweigel.com/log/2026-08-05-pillars-and-bridges-to-nowhere"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            outputs = [Path(temporary) / name for name in ("first", "second")]
+            for output in outputs:
+                subprocess.run(
+                    [sys.executable, "-m", "repurposer", "compile", str(example),
+                     "--config", str(CONFIG), "--output-dir", str(output)],
+                    cwd=PROJECT_ROOT, capture_output=True, check=True,
+                )
+            first, second = (
+                {file.name: file.read_bytes() for file in output.iterdir()}
+                for output in outputs
+            )
+            self.assertEqual(first, second)
+            self.assertEqual(len(first), 7)
+
+            scenes = json.loads(first["vertical-storyboard.json"])["scenes"]
+            self.assertEqual(len(scenes), 4)
+            self.assertIn("pathfinder place scaffolding", scenes[1]["voiceover"])
+            self.assertIn("separate source of clutter", scenes[2]["voiceover"])
+            self.assertEqual(scenes[3]["voiceover"], canonical_url)
+
+            feed = ET.fromstring(first["feed.xml"])
+            self.assertEqual(feed.findtext("./channel/item/link"), canonical_url)
+
     def test_each_format_applies_its_declared_transforms(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output_dir = Path(temporary) / "out"
