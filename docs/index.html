@@ -69,7 +69,7 @@ font-size:14px;color:var(--ink3)}
   </div>
 </header>
 <p>A single canonical document compiles to newsletter HTML, RSS, a podcast script, a vertical video storyboard, a carousel, and a plain-text version, with per-format transforms declared in config rather than done by re-prompting. Formats that would require inventing facts not present in the source fail loudly instead of hallucinating filler.</p>
-<p>Catalog task: <code>MEDIA-046</code>. Part of <a href="https://github.com/JesseRWeigel/722-things-to-build">722 things to build</a>. Repo: none. The fleet lead will create and push the public GitHub repository from the networked host.</p>
+<p>Catalog task: <code>MEDIA-046</code>. Part of <a href="https://github.com/JesseRWeigel/722-things-to-build">722 things to build</a>. Source: <a href="https://github.com/JesseRWeigel/repurposer">JesseRWeigel/repurposer</a>.</p>
 <h2>What this is</h2>
 <p>Repurposer is a deterministic command-line compiler. It reads one structured JSON document and a JSON transform configuration, then writes newsletter HTML, RSS, a podcast script, a vertical video storyboard, a carousel, and plain text. Every output is derived from source fields selected in configuration.</p>
 <p>Assumption: &quot;canonical document&quot; means structured source content with explicit metadata, sections, and optional facts. JSON keeps the format inspectable and avoids a runtime dependency.</p>
@@ -81,6 +81,11 @@ font-size:14px;color:var(--ink3)}
   --output-dir build</code></pre>
 <p>Successful compilation writes these seven files:</p>
 <table><thead><tr><th>Format</th><th>Example output</th></tr></thead><tbody><tr><td>Newsletter HTML</td><td><code>newsletter.html</code></td></tr><tr><td>RSS 2.0 feed</td><td><code>feed.xml</code></td></tr><tr><td>Podcast script</td><td><code>podcast-script.txt</code></td></tr><tr><td>Vertical video storyboard</td><td><code>vertical-storyboard.json</code></td></tr><tr><td>Carousel plan</td><td><code>carousel.json</code></td></tr><tr><td>Plain text</td><td><code>plain.txt</code></td></tr><tr><td>Provenance and hashes</td><td><code>manifest.json</code></td></tr></tbody></table>
+<h2>Example from a Minecraft field note</h2>
+<p><a href="https://github.com/JesseRWeigel/repurposer/blob/main/examples/minecraft-pillars.json"><code>examples/minecraft-pillars.json</code></a> adapts the public <a href="https://jesseweigel.com/log/2026-08-05-pillars-and-bridges-to-nowhere">Pillars and Bridges to Nowhere field note</a>. The fixture uses midnight UTC as a date-only placeholder, not a claimed publish time.</p>
+<pre><code>python3 -m repurposer compile examples/minecraft-pillars.json \
+  --config examples/transforms.json --output-dir build/minecraft-pillars</code></pre>
+<p>The results include a short speaking outline in <code>vertical-storyboard.json</code> and a <code>carousel.json</code>. The compiler does not generate screenshots, narration audio or video.</p>
 <h2>Source and configuration</h2>
 <p>The source can use any object layout. Each format maps fixed renderer roles such as <code>title</code>, <code>summary</code>, and <code>sections</code> to dotted paths in that object. See <a href="https://github.com/JesseRWeigel/repurposer/blob/main/examples/source.json"><code>examples/source.json</code></a> and <a href="https://github.com/JesseRWeigel/repurposer/blob/main/examples/transforms.json"><code>examples/transforms.json</code></a> for a complete pair.</p>
 <p>Every format has its own <code>transforms</code> array. Supported operations are:</p>
@@ -92,7 +97,7 @@ font-size:14px;color:var(--ink3)}
 <p>This command exercises the real CLI, all six renderers, independent structure and grounding checks, deterministic output, safe stale-output cleanup, and failure on a requested missing fact:</p>
 <pre><code>python3 -m unittest discover -s tests -v &amp;&amp; python3 scripts/verify_real_behavior.py</code></pre>
 <h2>Status</h2>
-<p>Verified with Python 3.12.3. Command:</p>
+<p>Historical verification with Python 3.12.3. The command above also runs the Minecraft example regression.</p>
 <pre><code>python3 -m unittest discover -s tests -v &amp;&amp; python3 scripts/verify_real_behavior.py</code></pre>
 <p>Observed output:</p>
 <pre><code>test_backup_cleanup_retries_after_a_transient_failure (test_engine.CompilerTests.test_backup_cleanup_retries_after_a_transient_failure) ... ok

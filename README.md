@@ -4,8 +4,7 @@ A single canonical document compiles to newsletter HTML, RSS, a podcast script, 
 
 **[Read this on the web](https://jesserweigel.github.io/repurposer/)**
 
-Catalog task: `MEDIA-046`. Part of [722 things to build](https://github.com/JesseRWeigel/722-things-to-build). Repo: none. The fleet lead will
-create and push the public GitHub repository from the networked host.
+Catalog task: `MEDIA-046`. Part of [722 things to build](https://github.com/JesseRWeigel/722-things-to-build). Source: [JesseRWeigel/repurposer](https://github.com/JesseRWeigel/repurposer).
 
 ## What this is
 
@@ -41,6 +40,20 @@ Successful compilation writes these seven files:
 | Carousel plan | `carousel.json` |
 | Plain text | `plain.txt` |
 | Provenance and hashes | `manifest.json` |
+
+## Example from a Minecraft field note
+
+[`examples/minecraft-pillars.json`](examples/minecraft-pillars.json) adapts the public
+[Pillars and Bridges to Nowhere field note](https://jesseweigel.com/log/2026-08-05-pillars-and-bridges-to-nowhere).
+The fixture uses midnight UTC as a date-only placeholder, not a claimed publish time.
+
+```bash
+python3 -m repurposer compile examples/minecraft-pillars.json \
+  --config examples/transforms.json --output-dir build/minecraft-pillars
+```
+
+The results include a short speaking outline in `vertical-storyboard.json` and a
+`carousel.json`. The compiler does not generate screenshots, narration audio or video.
 
 ## Source and configuration
 
@@ -84,7 +97,7 @@ python3 -m unittest discover -s tests -v && python3 scripts/verify_real_behavior
 
 ## Status
 
-Verified with Python 3.12.3. Command:
+Historical verification with Python 3.12.3. The command above also runs the Minecraft example regression.
 
 ```bash
 python3 -m unittest discover -s tests -v && python3 scripts/verify_real_behavior.py
